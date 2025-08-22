@@ -52,7 +52,7 @@ covid-platform/
 
 ```bash
 # 1) Clone and enter the project
-git clone <your-repo-url> covid-platform
+git clone (https://github.com/GAndrSky/final_project) covid-platform
 cd covid-platform
 
 # 2) Copy env template
@@ -146,6 +146,7 @@ In Docker it’s bundled. For local runs without Docker, install Mongo locally o
 
 **Port already in use**  
 Change `--port` in the Uvicorn command or free the port.
+
 
 
 
