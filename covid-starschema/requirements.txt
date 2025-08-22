@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+snowflake-connector-python
+pandas
+python-dotenv
+pymongo
+sweetviz
+plotly>=5.22
+prophet
+scikit-learn
