@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>US COVID Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <!-- Plotly CDN -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+  <header class="container">
+    <h1>US COVID Dashboard</h1>
+    <p class="subtitle">Snowflake + FastAPI + MongoDB (comments)</p>
+  </header>
+
+  <main class="container">
+    <!-- Controls -->
+    <section class="panel">
+      <h2>Data Controls</h2>
+      <div class="controls">
+        <label for="stateInput">State:</label>
+        <input id="stateInput" type="text" placeholder="e.g., New York" />
+        <button id="loadStateBtn">Load State</button>
+        <button id="loadUsBtn" class="ghost">Load USA</button>
+      </div>
+      <div id="status" class="status" hidden></div>
+    </section>
+
+    <!-- Charts -->
+    <section class="grid">
+      <div class="card">
+        <h3>New Cases & 7-day MA</h3>
+        <div id="casesChart" class="chart"></div>
+      </div>
+      <div class="card">
+        <h3>New Deaths & 7-day MA</h3>
+        <div id="deathsChart" class="chart"></div>
+      </div>
+    </section>
+
+    <!-- Comments -->
+    <section class="grid">
+      <div class="card">
+        <h3>Comments</h3>
+        <form id="commentForm" class="form">
+          <div class="row">
+            <label for="userInput">Name</label>
+            <input id="userInput" type="text" placeholder="Your name" required />
+          </div>
+          <div class="row">
+            <label for="commentStateInput">State (optional)</label>
+            <input id="commentStateInput" type="text" placeholder="e.g., New York" />
+          </div>
+          <div class="row">
+            <label for="textInput">Comment</label>
+            <textarea id="textInput" rows="3" placeholder="Your observation…" required></textarea>
+          </div>
+          <div class="row">
+            <label for="tagsInput">Tags (comma-separated, optional)</label>
+            <input id="tagsInput" type="text" placeholder="trend, anomaly, 2020-04" />
+          </div>
+          <div class="row right">
+            <button type="submit">Post Comment</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Recent Comments</h3>
+        <div class="controls small">
+          <label for="filterStateInput">Filter by state:</label>
+          <input id="filterStateInput" type="text" placeholder="e.g., New York" />
+          <button id="refreshCommentsBtn" class="ghost">Refresh</button>
+        </div>
+        <ul id="commentsList" class="comments"></ul>
+      </div>
+    </section>
+
+    <!-- EDA & Forecast -->
+    <section class="card">
+      <h2>EDA & Forecast</h2>
+
+      <div class="row">
+        <label>State</label>
+        <input id="edaState" placeholder="California" value="California">
+        <button id="runEdaBtn">Run EDA</button>
+        <span id="edaStatus" class="status" hidden></span>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <h3>EDA — Daily Cases</h3>
+          <iframe id="edaCasesFrame" style="width:100%;height:420px;border:1px solid #eee;"></iframe>
+          <div class="controls small">
+            <button id="openCasesHtmlBtn" class="ghost" disabled>Open in new tab</button>
+          </div>
+        </div>
+        <div class="col">
+          <h3>EDA — Daily Deaths</h3>
+          <iframe id="edaDeathsFrame" style="width:100%;height:420px;border:1px solid #eee;"></iframe>
+          <div class="controls small">
+            <button id="openDeathsHtmlBtn" class="ghost" disabled>Open in new tab</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <h4>EDA — Export</h4>
+          <div class="controls small">
+            <button id="downloadCsvBtn" disabled>Download CSV</button>
+          </div>
+        </div>
+      </div>
+
+      <hr style="margin:16px 0; opacity:.2;">
+
+      <div class="row">
+        <label>State</label>
+        <input id="fcState" placeholder="California" value="California">
+        <label>Days</label>
+        <input id="fcDays" type="number" value="30" min="7" step="1">
+        <button id="runFcBtn">Run Forecast</button>
+        <span id="fcStatus" class="status" hidden></span>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <h3>Forecast</h3>
+          <iframe id="forecastFrame" style="width:100%;height:500px;border:1px solid #eee;"></iframe>
+          <div class="controls small">
+            <button id="openForecastBtn" class="ghost" disabled>Open in new tab</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="container muted">
+    <small>
+      Data served by FastAPI endpoints:
+      <code>/cases?state=STATE</code>,
+      <code>/cases/us</code>,
+      <code>/comments</code>,
+      <code>/eda</code>,
+      <code>/forecast</code>.
+    </small>
+  </footer>
+
+  <script src="/static/app.js"></script>
+
+  <!-- Inline EDA/Forecast handlers -->
+  <script>
+  // EDA
+  const runEdaBtn = document.getElementById('runEdaBtn');
+  const edaState  = document.getElementById('edaState');
+  const edaCasesFrame  = document.getElementById('edaCasesFrame');
+  const edaDeathsFrame = document.getElementById('edaDeathsFrame');
+  const openCasesHtmlBtn  = document.getElementById('openCasesHtmlBtn');
+  const openDeathsHtmlBtn = document.getElementById('openDeathsHtmlBtn');
+  const downloadCsvBtn    = document.getElementById('downloadCsvBtn');
+  const edaStatus         = document.getElementById('edaStatus');
+
+  let lastEdaLinks = { cases: null, deaths: null, csv: null };
+
+  runEdaBtn.onclick = async () => {
+    const state = edaState.value || 'California';
+    runEdaBtn.disabled = true;
+    edaStatus.hidden = false;
+    edaStatus.textContent = 'Running EDA…';
+
+    try {
+      const res = await fetch('/eda', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ state })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'EDA failed');
+
+      // Save links
+      lastEdaLinks.cases  = data.urls?.daily_cases || null;
+      lastEdaLinks.deaths = data.urls?.daily_deaths || null;
+      lastEdaLinks.csv    = data.urls?.csv || null;
+
+      // Load iframes (cache-busting)
+      if (lastEdaLinks.cases)  edaCasesFrame.src  = lastEdaLinks.cases  + '?t=' + Date.now();
+      if (lastEdaLinks.deaths) edaDeathsFrame.src = lastEdaLinks.deaths + '?t=' + Date.now();
+
+      // Enable buttons
+      openCasesHtmlBtn.disabled  = !lastEdaLinks.cases;
+      openDeathsHtmlBtn.disabled = !lastEdaLinks.deaths;
+      downloadCsvBtn.disabled    = !lastEdaLinks.csv;
+
+      edaStatus.textContent = 'EDA ready.';
+    } catch (e) {
+      console.error(e);
+      alert(e.message || 'EDA failed');
+      edaStatus.textContent = 'EDA failed.';
+    } finally {
+      runEdaBtn.disabled = false;
+      setTimeout(()=> edaStatus.hidden = true, 1500);
+    }
+  };
+
+  openCasesHtmlBtn.onclick = () => {
+    if (lastEdaLinks.cases) window.open(lastEdaLinks.cases, '_blank');
+  };
+  openDeathsHtmlBtn.onclick = () => {
+    if (lastEdaLinks.deaths) window.open(lastEdaLinks.deaths, '_blank');
+  };
+  downloadCsvBtn.onclick = () => {
+    if (lastEdaLinks.csv) window.open(lastEdaLinks.csv, '_blank');
+  };
+
+  // Forecast
+  const runFcBtn = document.getElementById('runFcBtn');
+  const fcState  = document.getElementById('fcState');
+  const fcDays   = document.getElementById('fcDays');
+  const forecastFrame = document.getElementById('forecastFrame');
+  const openForecastBtn = document.getElementById('openForecastBtn');
+  const fcStatus = document.getElementById('fcStatus');
+
+  let lastForecastUrl = null;
+
+  runFcBtn.onclick = async () => {
+    const state = fcState.value || 'California';
+    const days  = parseInt(fcDays.value || '30', 10);
+
+    runFcBtn.disabled = true;
+    fcStatus.hidden = false;
+    fcStatus.textContent = 'Building forecast…';
+
+    try {
+      const res = await fetch('/forecast', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ state, days })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Forecast failed');
+
+      lastForecastUrl = data.url || null;
+      if (lastForecastUrl) forecastFrame.src = lastForecastUrl + '?t=' + Date.now();
+      openForecastBtn.disabled = !lastForecastUrl;
+      fcStatus.textContent = 'Forecast ready.';
+    } catch (e) {
+      console.error(e);
+      alert(e.message || 'Forecast failed');
+      fcStatus.textContent = 'Forecast failed.';
+    } finally {
+      runFcBtn.disabled = false;
+      setTimeout(()=> fcStatus.hidden = true, 1500);
+    }
+  };
+
+  openForecastBtn.onclick = () => {
+    if (lastForecastUrl) window.open(lastForecastUrl, '_blank');
+  };
+  </script>
+</body>
+</html>
